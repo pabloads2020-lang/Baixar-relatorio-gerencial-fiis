@@ -7,60 +7,54 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-/* Seus estilos originais mantidos */
 :root { --bg: #0e1117; --bg2: #161b25; --bg3: #1c2333; --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.13); --gold: #f5c842; --gold2: #e0a800; --text: #e8eaf0; --text2: #8b93a7; --text3: #555e72; --green: #2ecc71; --red: #e74c3c; --amber: #f39c12; }
 body.light { --bg: #f5f7fa; --bg2: #ffffff; --text: #1a1a2e; --text2: #4a5568; }
-/* ... (mantive todos os seus estilos, só adicionei alguns novos) */
-.filter-row { display: flex; gap: 10px; flex-wrap: wrap; margin: 12px 0; }
-.filter-row select, .filter-row button { padding: 8px 12px; border-radius: 8px; background: var(--input-bg); border: 1px solid var(--input-border); color: var(--text); }
-.gerencial { background: rgba(245,200,66,0.18) !important; border-left: 4px solid var(--gold) !important; }
+* { box-sizing: border-box; margin: 0; padding: 0; transition: all 0.2s; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+.header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
+.card-title { font-size: 13px; font-weight: 600; color: var(--text3); text-transform: uppercase; margin-bottom: 1rem; }
+.api-input { width: 100%; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 10px; color: var(--text); }
+.btn { padding: 10px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; border: none; }
+.btn-gold { background: var(--gold); color: #000; }
+.btn-ghost { background: transparent; border: 1px solid var(--border2); color: var(--text2); }
+.result-label { font-size: 13px; color: var(--text3); margin: 8px 0; }
+.gerencial { background: rgba(245,200,66,0.18) !important; border-left: 4px solid #f5c842; }
 </style>
 </head>
 <body>
 
-<!-- ... (header e cards de API mantidos iguais) ... -->
-
-<div class="card">
-  <div class="card-title">📄 Buscar Documentos no Fundos.NET</div>
-  
-  <div class="api-row">
-    <input type="text" id="tickerBusca" class="api-input" placeholder="Ticker (ex: HGLG11)" style="flex:2">
-    <button id="btnBuscarRelatorios" class="btn btn-gold">🔍 Buscar</button>
-    <button id="btnLimparBusca" class="btn btn-ghost">Limpar</button>
-  </div>
-
-  <!-- Novos Filtros -->
-  <div class="filter-row">
-    <select id="filtroAno">
-      <option value="">Todos os anos</option>
-      <option value="2026" selected>2026</option>
-      <option value="2025">2025</option>
-      <option value="2024">2024</option>
-    </select>
-
-    <select id="filtroTipo">
-      <option value="">Todos os tipos</option>
-      <option value="gerencial">Relatório Gerencial</option>
-      <option value="rendimentos">Rendimentos e Amortizações</option>
-      <option value="relatorio">Relatórios em Geral</option>
-    </select>
-  </div>
-
-  <div id="listaRelatorios" style="margin-top:1rem; max-height:550px; overflow-y:auto;"></div>
+<div class="overlay" id="overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:200;align-items:center;justify-content:center;flex-direction:column;">
+  <div class="spin" style="width:50px;height:50px;border:4px solid #333;border-top-color:#f5c842;border-radius:50%;animation:spin 1s linear infinite;"></div>
+  <div id="overlayText" style="margin-top:15px;color:#fff;">Processando...</div>
 </div>
 
-<!-- resto do seu HTML (upload, resultado, etc.) -->
+<header class="header">
+  <div class="header-logo"><div style="background:#f5c842;color:#000;padding:4px 10px;border-radius:6px;font-weight:700;">FII</div> Leitor de Relatórios</div>
+</header>
+
+<main style="max-width:1100px;margin:0 auto;padding:2rem;">
+  
+  <div class="card">
+    <div class="card-title">📄 Buscar Documentos no Fundos.NET</div>
+    
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px;">
+      <input type="text" id="tickerBusca" placeholder="Digite o ticker (ex: HGLG11)" style="flex:1;padding:12px;border-radius:8px;background:#1c2333;border:1px solid #333;color:white;">
+      <button id="btnBuscarRelatorios" class="btn btn-gold">🔍 Buscar</button>
+      <button id="btnLimparBusca" class="btn btn-ghost">Limpar</button>
+    </div>
+
+    <div id="listaRelatorios" style="max-height:600px;overflow-y:auto;"></div>
+  </div>
+
+</main>
 
 <script>
-// ... (seu código de API Key, Gemini, etc. mantido)
+const WORKER_BASE = "https://ancient-moon-3aa3.pabloads2020.workers.dev";
 
-// ==================== BUSCA COM FILTROS ====================
 async function buscarRelatorios(ticker) {
   const listaDiv = document.getElementById('listaRelatorios');
-  listaDiv.innerHTML = '<div style="padding:2rem; text-align:center;">⏳ Buscando...</div>';
-
-  const anoSelecionado = document.getElementById('filtroAno').value;
-  const tipoSelecionado = document.getElementById('filtroTipo').value;
+  listaDiv.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">⏳ Buscando documentos recentes...</div>';
 
   try {
     const resp = await fetch(`${WORKER_BASE}/buscar?ticker=${encodeURIComponent(ticker)}`);
@@ -68,50 +62,36 @@ async function buscarRelatorios(ticker) {
 
     let docs = data.documentos || [];
 
-    // Aplicar filtros no frontend
-    if (anoSelecionado) {
-      docs = docs.filter(d => {
-        const dataStr = (d.dataEntrega || d.dataReferencia || '');
-        return dataStr.includes(anoSelecionado);
-      });
-    }
-
-    if (tipoSelecionado) {
-      docs = docs.filter(d => {
-        const tipo = String(d.tipo || d.tipoDocumento || '').toLowerCase();
-        if (tipoSelecionado === 'gerencial') return tipo.includes('gerencial');
-        if (tipoSelecionado === 'rendimentos') return tipo.includes('rendimentos') || tipo.includes('amortiza');
-        if (tipoSelecionado === 'relatorio') return tipo.includes('relatorio') || tipo.includes('relatório');
-        return true;
-      });
-    }
+    // Filtro básico 2026
+    docs = docs.filter(d => {
+      const dataStr = (d.dataEntrega || d.dataReferencia || '');
+      return dataStr.includes('2026');
+    });
 
     if (docs.length === 0) {
-      listaDiv.innerHTML = `<div style="padding:1.5rem; color:var(--amber);">Nenhum documento encontrado com os filtros selecionados.</div>`;
+      listaDiv.innerHTML = '<div style="padding:30px;text-align:center;color:#f39c12;">Nenhum documento de 2026 encontrado.</div>';
       return;
     }
 
-    let html = `<div class="result-label">📄 ${docs.length} documento(s) encontrado(s)</div>`;
+    let html = `<div style="margin:10px 0 15px;font-weight:600;">📄 ${docs.length} documento(s) encontrado(s) em 2026</div>`;
 
     for (const doc of docs) {
       const tipo = String(doc.tipo || doc.tipoDocumento || 'Documento');
       const isGerencial = tipo.toLowerCase().includes('gerencial');
-      
+
       html += `
-        <div style="padding:1rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; ${isGerencial ? 'class="gerencial"' : ''}">
+        <div style="padding:14px; margin:6px 0; border:1px solid #333; border-radius:8px; display:flex; justify-content:space-between; align-items:center; ${isGerencial ? 'border-left:4px solid #f5c842;background:rgba(245,200,66,0.1);' : ''}">
           <div>
-            <strong>${escapeHtml(tipo)}</strong><br>
-            <small>Entrega: ${doc.dataEntrega || '-'} | Ref: ${doc.dataReferencia || '-'}</small>
+            <strong>${tipo}</strong><br>
+            <small style="color:#aaa">Entrega: ${doc.dataEntrega || '-'} | Ref: ${doc.dataReferencia || '-'}</small>
           </div>
-          <button class="btn-baixar btn btn-ghost" data-id="${doc.id}" data-nome="${escapeHtml(tipo)}">
-            📥 Baixar e Analisar
-          </button>
+          <button class="btn btn-ghost" data-id="${doc.id}" data-nome="${tipo}">📥 Baixar</button>
         </div>`;
     }
 
     listaDiv.innerHTML = html;
 
-    document.querySelectorAll('.btn-baixar').forEach(btn => {
+    document.querySelectorAll('.btn-ghost').forEach(btn => {
       btn.addEventListener('click', () => {
         const id = btn.getAttribute('data-id');
         const nome = btn.getAttribute('data-nome');
@@ -119,16 +99,40 @@ async function buscarRelatorios(ticker) {
       });
     });
 
-  } catch (err) {
-    listaDiv.innerHTML = `<div style="padding:1rem; color:var(--red);">❌ Erro: ${err.message}</div>`;
+  } catch (e) {
+    listaDiv.innerHTML = `<div style="color:red;padding:20px;">❌ Erro: ${e.message}</div>`;
   }
 }
 
-// Evento do botão Buscar
+async function baixarEAnalisar(id, nome) {
+  const overlay = document.getElementById('overlay');
+  overlay.style.display = 'flex';
+  document.getElementById('overlayText').textContent = `Baixando ${nome}...`;
+
+  try {
+    const resp = await fetch(`${WORKER_BASE}/baixar?id=${id}`);
+    const blob = await resp.blob();
+    const file = new File([blob], `${nome}.pdf`, {type: 'application/pdf'});
+    
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    document.getElementById('filePdf').files = dt.files;
+    document.getElementById('fileName').textContent = file.name;
+    
+    // Dispara análise automática
+    document.getElementById('btnImportar').click();
+  } catch (err) {
+    alert('Erro ao baixar: ' + err.message);
+  } finally {
+    overlay.style.display = 'none';
+  }
+}
+
+// Eventos
 document.getElementById('btnBuscarRelatorios').addEventListener('click', () => {
   const ticker = document.getElementById('tickerBusca').value.trim().toUpperCase();
-  if (!ticker) return setStatus('Digite um ticker', 'err');
-  buscarRelatorios(ticker);
+  if (ticker) buscarRelatorios(ticker);
+  else alert("Digite um ticker");
 });
 
 document.getElementById('btnLimparBusca').addEventListener('click', () => {
