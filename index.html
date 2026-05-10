@@ -343,7 +343,7 @@ document.getElementById('btnBuscarRelatorios').addEventListener('click', async (
       throw new Error(data.erro || data.error || `Erro ${resp.status}`);
     }
 
-    const docs = data.documentos || [];
+    const docs = data.documentos || data.relatorios || [];
     if (docs.length === 0) {
       listaDiv.innerHTML = '<div style="padding:1rem;color:var(--text3);">Nenhum Relatório Gerencial encontrado para este ticker.</div>';
       setStatusBusca(`Nenhum relatório encontrado para ${escapeHtml(ticker)}.`, 'warn');
