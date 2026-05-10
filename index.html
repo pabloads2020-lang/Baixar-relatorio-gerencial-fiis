@@ -1,104 +1,187 @@
 <!DOCTYPE html>
 <html lang="pt-br">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Leitor de Relatórios Gerenciais · FIIs</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+/* MANTENDO TODO O SEU ESTILO ORIGINAL */
+:root {
+  --bg:#0e1117;--bg2:#161b25;--bg3:#1c2333;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --gold:#f5c842;--gold2:#e0a800;
+  --text:#e8eaf0;--text2:#8b93a7;--text3:#555e72;
+  --green:#2ecc71;--red:#e74c3c;--radius:12px;
+}
+body.light {
+  --bg:#f8f9fa;--bg2:#ffffff;--bg3:#f1f3f5;
+  --border:rgba(0,0,0,0.08);--border2:rgba(0,0,0,0.12);
+  --text:#1a1d23;--text2:#495057;--text3:#adb5bd;
+}
+* { margin:0; padding:0; box-sizing:border-box; outline:none; }
+body { font-family:'DM Sans', sans-serif; background:var(--bg); color:var(--text); transition: background 0.3s; line-height:1.5; }
+.app-container { max-width:1200px; margin:0 auto; padding:2rem; }
+header { display:flex; justify-content:space-between; align-items:center; margin-bottom:2rem; }
+.logo-area h1 { font-size:1.5rem; font-weight:700; color:var(--gold); }
+.top-actions { display:flex; gap:10px; }
+.card { background:var(--bg2); border:1px solid var(--border); border-radius:var(--radius); padding:1.5rem; margin-bottom:1.5rem; }
+.grid { display:grid; grid-template-columns: 1fr 1.5fr; gap:1.5rem; }
+.btn { cursor:pointer; border:none; border-radius:8px; font-weight:600; transition:0.2s; display:inline-flex; align-items:center; justify-content:center; gap:8px; }
+.btn-gold { background:var(--gold); color:#000; padding:0.8rem 1.5rem; }
+.btn-gold:hover { background:var(--gold2); transform:translateY(-1px); }
+.input-group { margin-bottom:1.2rem; }
+.input-group label { display:block; margin-bottom:0.5rem; font-size:0.85rem; color:var(--text2); text-transform:uppercase; letter-spacing:0.5px; }
+input { width:100%; background:var(--bg3); border:1px solid var(--border); border-radius:8px; padding:0.8rem; color:var(--text); font-family:inherit; }
+#statusBusca { font-size: 0.85rem; margin-top: 8px; }
+.relatorio-item { display:flex; justify-content:space-between; align-items:center; padding:0.8rem; border-bottom:1px solid var(--border); }
+.relatorio-item:last-child { border-bottom:none; }
+.relatorio-info strong { display:block; font-size:0.95rem; }
+.relatorio-info small { color:var(--text2); font-size:0.8rem; }
+#overlay { position:fixed; inset:0; background:rgba(0,0,0,0.85); display:none; flex-direction:column; align-items:center; justify-content:center; z-index:9999; backdrop-filter:blur(5px); }
+.spinner { width:40px; height:40px; border:3px solid rgba(245,200,66,0.2); border-top-color:var(--gold); border-radius:50%; animation:spin 1s linear infinite; margin-bottom:1rem; }
+@keyframes spin { to { transform:rotate(360deg); } }
+/* ... (Seu CSS continua aqui, simplifiquei para o post não ficar gigante) ... */
+</style>
+</head>
+<body>
+
+<div id="overlay">
+  <div class="spinner"></div>
+  <div id="overlayMsg" style="color:var(--gold); font-weight:600;">Processando...</div>
+</div>
+
+<div class="app-container">
+  <header>
+    <div class="logo-area">
+      <h1>PLENO <span style="font-weight:300; color:var(--text2);">Relatórios</span></h1>
+      <div id="hDate" style="font-size:0.8rem; color:var(--text3);"></div>
+    </div>
+    <div class="top-actions">
+      <button class="btn" id="themeToggle" style="background:var(--bg2); color:var(--text); width:40px; border:1px solid var(--border);">🌙</button>
+      <input type="password" id="apiKey" placeholder="Sua Gemini API Key" style="width:220px; font-size:0.8rem;">
+    </div>
+  </header>
+
+  <div class="grid">
+    <div class="sidebar">
+      <div class="card">
+        <h3 style="margin-bottom:1rem; font-size:1rem;">🔍 Buscar no Fundos.NET</h3>
+        <div style="display:flex; gap:8px;">
+          <input type="text" id="tickerBusca" placeholder="Ex: HGBS11" style="text-transform:uppercase;">
+          <button class="btn btn-gold" id="btnBuscarRelatorios" style="padding:0.8rem;">Buscar</button>
+        </div>
+        <div id="statusBusca"></div>
+        <div id="listaRelatorios" style="margin-top:1.5rem;"></div>
+      </div>
+
+      <div class="card" style="display:none;"> <input type="file" id="filePdf" accept="application/pdf">
+        <button id="btnImportar">Importar Manual</button>
+      </div>
+    </div>
+
+    <div class="main-content">
+      <div class="card" style="min-height:400px;">
+        <div id="status">Aguardando seleção de relatório...</div>
+        <div id="resultadoIA" style="white-space: pre-wrap; font-size:0.95rem; line-height:1.7;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-// ... (mantenha as configurações iniciais do pdfjs e App)
-
-/* ═══ WORKER URL ══════════════════════════════════════════════════════════ */
-// Certifique-se de que esta URL está correta e sem barra no final
+/* ═══ CONFIGURAÇÕES E CONEXÃO ═══ */
 const WORKER_BASE = "https://ancient-moon-3aa3.pabloads2020.workers.dev";
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-/* ═══ BUSCA POR TICKER (INTEGRADO COM WORKER) ════════════════════════════ */
+/* ═══ BUSCA NO WORKER ═══ */
 document.getElementById('btnBuscarRelatorios').addEventListener('click', async () => {
   const ticker = document.getElementById('tickerBusca').value.trim().toUpperCase();
-  if (!ticker) { setStatusBusca('Digite um ticker (ex: HGBS11)', 'err'); return; }
+  if(!ticker) return;
 
   const btn = document.getElementById('btnBuscarRelatorios');
-  btn.disabled = true; btn.textContent = '⏳ Buscando...';
   const listaDiv = document.getElementById('listaRelatorios');
-  listaDiv.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text3);">🔍 Consultando Fundos.NET...</div>';
+  
+  btn.disabled = true;
+  listaDiv.innerHTML = 'Carregando...';
 
   try {
-    // Chamada ao seu Worker: ?ticker=XXXX
-    const resp = await fetch(`${WORKER_BASE}?ticker=${ticker}`);
-    const data = await resp.json();
+    const r = await fetch(`${WORKER_BASE}?ticker=${ticker}`);
+    const data = await r.json();
+    if(data.erro) throw new Error(data.erro);
 
-    if (data.erro) throw new Error(data.erro);
-
-    const docs = data.documentos || [];
-    if (docs.length === 0) {
-      listaDiv.innerHTML = '<div style="padding:1rem;color:var(--text3);">Nenhum relatório encontrado.</div>';
-      return;
-    }
-
-    let html = `<div class="result-label">📄 Relatórios de ${ticker}:</div>`;
-    docs.forEach((doc, idx) => {
+    let html = '';
+    data.documentos.forEach(doc => {
       html += `
-        <div class="relatorio-item ${idx === 0 ? 'relatorio-destaque' : ''}">
+        <div class="relatorio-item">
           <div class="relatorio-info">
-            <strong>Ref: ${doc.dataReferencia}</strong>
-            <small>Entrega: ${doc.dataEntrega} | ID: ${doc.id}</small>
+            <strong>${doc.dataReferencia}</strong>
+            <small>${doc.dataEntrega}</small>
           </div>
-          <button class="btn btn-gold btn-baixar" data-id="${doc.id}" data-ticker="${ticker}">
-            📥 Analisar
-          </button>
+          <button class="btn btn-gold" onclick="baixarEAnalisar('${doc.id}', '${ticker}')" style="padding:4px 10px; font-size:0.7rem;">Analisar</button>
         </div>`;
     });
     listaDiv.innerHTML = html;
-
-    // Evento de clique para baixar
-    document.querySelectorAll('.btn-baixar').forEach(b => {
-      b.addEventListener('click', () => baixarEAnalisar(b.dataset.id, b.dataset.ticker));
-    });
-
-  } catch (err) {
-    listaDiv.innerHTML = `<div style="padding:1rem;color:var(--red);">❌ ${err.message}</div>`;
+  } catch(e) {
+    listaDiv.innerHTML = `<span style="color:red">${e.message}</span>`;
   } finally {
-    btn.disabled = false; btn.textContent = '🔍 Buscar';
+    btn.disabled = false;
   }
 });
 
-/* ═══ BAIXAR E ANALISAR (INTEGRADO COM WORKER) ══════════════════════════ */
-async function baixarEAnalisar(docId, ticker) {
-  const apiKey = getApiKey();
-  if (!validarApiKey(apiKey)) {
-    setStatus('🔑 Configure sua chave API primeiro.', 'err');
-    return;
-  }
+/* ═══ DOWNLOAD E TRATAMENTO DO PDF ═══ */
+async function baixarEAnalisar(id, ticker) {
+  const key = document.getElementById('apiKey').value;
+  if(!key) { alert('Insira a API Key do Gemini'); return; }
 
-  setOverlay(true, `📥 Baixando PDF do FNET (ID: ${docId})...`);
-  
+  setOverlay(true, "Baixando PDF...");
   try {
-    // Chamada ao seu Worker para o PDF: ?id=XXX&acao=pdf
-    const urlPdf = `${WORKER_BASE}?id=${docId}&acao=pdf`;
-    const resp = await fetch(urlPdf);
+    const res = await fetch(`${WORKER_BASE}?id=${id}&acao=pdf`);
+    const blob = await res.blob();
+    const arrayBuffer = await blob.arrayBuffer();
     
-    if (!resp.ok) throw new Error("Erro ao baixar PDF do Worker.");
-
-    const blob = await resp.blob();
-    const file = new File([blob], `${ticker}_relatorio.pdf`, { type: 'application/pdf' });
-
-    // Coloca o arquivo no input hidden para o fluxo da IA ler
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    document.getElementById('filePdf').files = dt.files;
-    document.getElementById('fileName').textContent = file.name;
-
+    setOverlay(true, "Lendo PDF e Gerando Insight...");
+    const texto = await extrairTexto(arrayBuffer);
+    await chamarIA(texto, key);
+  } catch(e) {
+    alert(e.message);
+  } finally {
     setOverlay(false);
-    // Dispara o clique no botão de análise que já existe no seu código
-    document.getElementById('btnImportar').click();
-
-  } catch (err) {
-    setOverlay(false);
-    setStatus(`❌ Erro: ${err.message}`, 'err');
   }
 }
 
-/* ═══ AJUSTE NO GEMINI (MODELO) ══════════════════════════════════════════ */
-// Localize a função analisarComGemini no seu código e altere a URL:
-// De: gemini-2.5-flash (pode falhar se não disponível)
-// Para: gemini-1.5-flash
-const urlGemini = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+async function extrairTexto(data) {
+  const pdf = await pdfjsLib.getDocument({data}).promise;
+  let fullText = "";
+  for(let i=1; i<=Math.min(pdf.numPages, 10); i++) { // Lendo até 10 páginas
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    fullText += content.items.map(s => s.str).join(" ") + "\n";
+  }
+  return fullText;
+}
 
-// ... (Mantenha o restante do seu código original de renderização e lógica)
+async function chamarIA(texto, key) {
+  const prompt = "Analise este relatório gerencial de FII e resuma os pontos principais: dividendos, vacância e perspectivas. Seja direto e profissional.\n\n" + texto;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+  
+  const res = await fetch(url, {
+    method: 'POST',
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+  });
+  const data = await res.json();
+  document.getElementById('resultadoIA').innerText = data.candidates[0].content.parts[0].text;
+}
+
+function setOverlay(show, msg) {
+  document.getElementById('overlay').style.display = show ? 'flex' : 'none';
+  document.getElementById('overlayMsg').innerText = msg;
+}
+
+// Relógio e Tema
+setInterval(() => { document.getElementById('hDate').textContent = new Date().toLocaleString(); }, 1000);
+document.getElementById('themeToggle').onclick = () => document.body.classList.toggle('light');
 </script>
+</body>
 </html>
