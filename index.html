@@ -216,7 +216,8 @@ function pegarDataDoc(d) {
     d.data,
     d.ref,
     d.dataReferencia,
-    d.data_referencia
+    d.data_referencia,
+    d.dataEntregaOriginal
   ];
 
   for (const c of campos) {
@@ -225,8 +226,8 @@ function pegarDataDoc(d) {
   }
 
   // fallback: tenta extrair números no texto e montar dd/mm/yyyy
-  if (d.titulo || d.nome) {
-    const txt = String(d.titulo || d.nome);
+  if (d.titulo || d.nome || d.nomeArquivo || d.descricaoDocumento) {
+    const txt = String(d.titulo || d.nome || d.nomeArquivo || d.descricaoDocumento);
     const m = txt.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
     if (m) return parseDataEntrega(m[0]);
   }
@@ -234,6 +235,12 @@ function pegarDataDoc(d) {
   return null;
 }
 
+/* === Função buscarRelatorios (substitua a versão antiga por esta) ===
+   - Normaliza vários campos
+   - Filtra permissivamente por palavras-chave
+   - Faz fallback pegando os 3 mais recentes se não houver matches
+   - Mostra console.table para debug rápido
+*/
 async function buscarRelatorios(ticker) {
   const agora = new Date();
 
@@ -246,31 +253,44 @@ async function buscarRelatorios(ticker) {
     throw new Error('Resposta inválida do Worker');
   }
 
-  // DEBUG opcional: veja no console tudo que o Worker está devolvendo
+  // normaliza / mapeia e tenta extrair data
+  const candidatos = data.documentos.map(d => {
+    const _dataObj = pegarDataDoc(d);
+    const combined = [
+      d.tipo, d.tipoDocumento, d.tipoDocumentoOriginal,
+      d.descricaoDocumento, d.categoriaDocumento,
+      d.nomeArquivo, d.titulo, d.nome, d.descricao
+    ].filter(Boolean).join(' ');
+    return { ...d, _dataObj, _txt: normalizarTexto(combined) };
+  })
+  // só documentos com data válida e <= agora
+  .filter(d => d._dataObj && d._dataObj <= agora);
+
+  // filtro permissivo por palavras-chave
+  const matched = candidatos.filter(d => {
+    const t = d._txt;
+    return t.includes('gerencial') || t.includes('relatorio') || t.includes('relatorios') || t.includes('anual') || t.includes('relatorio gerencial') || t.includes('relatório gerencial');
+  })
+  .sort((a,b) => b._dataObj - a._dataObj);
+
+  // fallback: se não encontrou nenhum "gerencial", pega os 3 mais recentes
+  let resultado = matched.slice(0, 3);
+  if (resultado.length === 0) {
+    const todosOrdenados = candidatos.sort((a,b) => b._dataObj - a._dataObj);
+    resultado = todosOrdenados.slice(0, 3);
+  }
+
+  // DEBUG: mostre no console id, tipo e data para inspeção rápida
   try {
-    console.table(
-      data.documentos.map(d => ({
-        tipo: d.tipo || d.tipoDocumento || d.titulo || '',
-        entrega: d.dataEntrega || d.data_entrega || d.dataPublicacao || d.data || '',
-        id: d.id || ''
-      }))
-    );
-  } catch(e) {}
+    console.table(resultado.map(r => ({
+      id: r.id,
+      tipo: r.tipo || r.tipoDocumento || r.tipoDocumentoOriginal || r.titulo || '',
+      dataEntrega: r.dataEntrega || r.data || ''
+    })));
+  } catch (e) {}
 
-  const docs = data.documentos
-    .filter(d => {
-      const tipo = normalizarTexto(d.tipo || d.tipoDocumento || d.titulo || d.nome || '');
-      return tipo.includes('relatorio gerencial') || tipo.includes('relatório gerencial') || tipo.includes('rel gerencial');
-    })
-    .map(d => {
-      const dataObj = pegarDataDoc(d);
-      return { ...d, _dataObj: dataObj };
-    })
-    .filter(d => d._dataObj && d._dataObj <= agora);
-
-  docs.sort((a, b) => b._dataObj - a._dataObj);
-
-  return docs.slice(0, 3).map(({ _dataObj, ...rest }) => rest);
+  // retorna objetos sem campos internos
+  return resultado.map(({ _dataObj, _txt, ...rest }) => rest);
 }
 
 // ========== RESTANTE DO SEU SCRIPT (inalterado) ==========
@@ -311,8 +331,8 @@ document.getElementById('btnBuscarRelatorios').addEventListener('click', async (
     for (const doc of relatorios) {
       html += `
         <div style="padding:0.75rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
-          <div><strong>${escapeHtml(doc.tipo || doc.titulo || 'Relatório Gerencial')}</strong><br><small>Entrega: ${doc.dataEntrega || doc.data_entrega || doc.data || '-' } | Ref: ${doc.dataReferencia || doc.data_referencia || '-'}</small></div>
-          <button class="btn-baixar btn btn-ghost" data-id="${doc.id}" data-nome="Relatório ${doc.dataEntrega || doc.data_entrega || ''}">📥 Baixar e Analisar</button>
+          <div><strong>${escapeHtml(doc.tipo || doc.titulo || doc.nomeArquivo || 'Relatório Gerencial')}</strong><br><small>Entrega: ${doc.dataEntrega || doc.data_entrega || doc.data || '-' } | Ref: ${doc.dataReferencia || doc.data_referencia || '-'}</small></div>
+          <button class="btn-baixar btn btn-ghost" data-id="${doc.id}" data-nome="${escapeHtml(doc.titulo || doc.nomeArquivo || ('Relatório ' + (doc.dataEntrega || '')))}">📥 Baixar e Analisar</button>
         </div>`;
     }
     listaDiv.innerHTML = html;
@@ -470,9 +490,7 @@ document.getElementById('btnImportar').addEventListener('click', async () => {
 
 document.getElementById('btnLimpar').addEventListener('click', () => { document.getElementById('filePdf').value = ''; document.getElementById('fileName').textContent = 'Selecionar arquivo...'; document.getElementById('resultArea').style.display = 'none'; document.getElementById('status').classList.remove('show'); debugContent=[]; document.getElementById('debugBox').classList.remove('show'); });
 document.getElementById('btnToggleDebug').addEventListener('click', () => { document.getElementById('debugBox').classList.toggle('show'); });
-function applyTheme(theme) { document.body.classList.toggle('light', theme===
-
-'light'); document.getElementById('themeToggle').textContent = theme==='light' ? '☀️' : '🌙'; }
+function applyTheme(theme) { document.body.classList.toggle('light', theme=== 'light'); document.getElementById('themeToggle').textContent = theme==='light' ? '☀️' : '🌙'; }
 document.getElementById('themeToggle').addEventListener('click', () => { const novoTema = document.body.classList.contains('light') ? 'dark' : 'light'; applyTheme(novoTema); localStorage.setItem('theme', novoTema); });
 applyTheme(localStorage.getItem('theme') || 'dark');
 function atualizarRelogio() { document.getElementById('hDate').textContent = new Date().toLocaleString('pt-BR'); }
