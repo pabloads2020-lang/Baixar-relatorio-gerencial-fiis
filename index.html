@@ -163,7 +163,7 @@ async function buscarRelatorios(ticker) {
 
   try {
     const resp = await fetch(`${WORKER_BASE}/buscar?ticker=${encodeURIComponent(ticker)}`);
-    if (!resp.ok) throw new Error(`Worker respondeu com status ${resp.status}`);
+    if (!resp.ok) throw new Error(`Worker: ${resp.status}`);
 
     const data = await resp.json();
     if (data.erro) throw new Error(data.erro);
@@ -175,17 +175,17 @@ async function buscarRelatorios(ticker) {
       return;
     }
 
-    let html = `<div class="result-label">📄 Últimos documentos encontrados (${docs.length})</div>`;
+    let html = `<div class="result-label">📄 Últimos documentos encontrados (${docs.length}) - Relatório Gerencial destacado</div>`;
 
     for (const doc of docs) {
-      const tipo = String(doc.tipo || doc.tipoDocumento || '');
+      const tipo = String(doc.tipo || doc.tipoDocumento || 'Documento');
       const isGerencial = tipo.toLowerCase().includes('gerencial');
       
       html += `
-        <div style="padding:0.9rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; ${isGerencial ? 'class="gerencial"' : ''}">
-          <div style="flex:1">
-            <strong>${escapeHtml(tipo || 'Documento')}</strong><br>
-            <small style="color:var(--text2)">Entrega: ${doc.dataEntrega || '-'} | Ref: ${doc.dataReferencia || '-'}</small>
+        <div style="padding:0.9rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; ${isGerencial ? 'background:rgba(245,200,66,0.15); border-left:4px solid #f5c842;' : ''}">
+          <div>
+            <strong>${escapeHtml(tipo)}</strong><br>
+            <small>Entrega: ${doc.dataEntrega || '-'} | Ref: ${doc.dataReferencia || '-'}</small>
           </div>
           <button class="btn-baixar btn btn-ghost" data-id="${doc.id}" data-nome="${escapeHtml(tipo)}">
             📥 Baixar e Analisar
@@ -204,8 +204,7 @@ async function buscarRelatorios(ticker) {
     });
 
   } catch (err) {
-    listaDiv.innerHTML = `<div style="padding:1rem; color:var(--red);">❌ Erro: ${err.message}</div>`;
-    console.error(err);
+    listaDiv.innerHTML = `<div style="padding:1rem; color:var(--red);">❌ ${err.message}</div>`;
   }
 }
 
