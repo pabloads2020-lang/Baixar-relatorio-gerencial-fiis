@@ -1,144 +1,69 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Leitor de Relatórios Gerenciais · FIIs</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<style>
-:root { --bg: #0e1117; --bg2: #161b25; --bg3: #1c2333; --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.13); --gold: #f5c842; --gold2: #e0a800; --text: #e8eaf0; --text2: #8b93a7; --text3: #555e72; --green: #2ecc71; --red: #e74c3c; --amber: #f39c12; }
-body.light { --bg: #f5f7fa; --bg2: #ffffff; --text: #1a1a2e; --text2: #4a5568; }
-* { box-sizing: border-box; margin: 0; padding: 0; transition: all 0.2s; }
-body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
-.header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 2rem; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
-.card { background: var(--bg2); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; }
-.card-title { font-size: 13px; font-weight: 600; color: var(--text3); text-transform: uppercase; margin-bottom: 1rem; }
-.api-input { width: 100%; background: var(--bg3); border: 1px solid var(--border2); border-radius: 8px; padding: 10px; color: var(--text); }
-.btn { padding: 10px 16px; border-radius: 8px; font-weight: 500; cursor: pointer; border: none; }
-.btn-gold { background: var(--gold); color: #000; }
-.btn-ghost { background: transparent; border: 1px solid var(--border2); color: var(--text2); }
-.result-label { font-size: 13px; color: var(--text3); margin: 8px 0; }
-.gerencial { background: rgba(245,200,66,0.18) !important; border-left: 4px solid #f5c842; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório Gerencial FII - Fundos.Net</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
+        input { width: 200px; padding: 10px; font-size: 16px; }
+        button { padding: 10px 20px; font-size: 16px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #resultado { margin-top: 20px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; }
+        .loading { color: #007bff; }
+        .erro { color: red; }
+        iframe { width: 100%; height: 400px; border: none; margin-top: 20px; }
+    </style>
 </head>
 <body>
-
-<div class="overlay" id="overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:200;align-items:center;justify-content:center;flex-direction:column;">
-  <div class="spin" style="width:50px;height:50px;border:4px solid #333;border-top-color:#f5c842;border-radius:50%;animation:spin 1s linear infinite;"></div>
-  <div id="overlayText" style="margin-top:15px;color:#fff;">Processando...</div>
-</div>
-
-<header class="header">
-  <div class="header-logo"><div style="background:#f5c842;color:#000;padding:4px 10px;border-radius:6px;font-weight:700;">FII</div> Leitor de Relatórios</div>
-</header>
-
-<main style="max-width:1100px;margin:0 auto;padding:2rem;">
-  
-  <div class="card">
-    <div class="card-title">📄 Buscar Documentos no Fundos.NET</div>
+    <h1>🔍 Relatório Gerencial Mais Recente do FII</h1>
+    <p>Digite o ticker (ex: KNRI11) e clique em Buscar. Pega o mais recente de 2026 no Fundos.Net.</p>
     
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:15px;">
-      <input type="text" id="tickerBusca" placeholder="Digite o ticker (ex: HGLG11)" style="flex:1;padding:12px;border-radius:8px;background:#1c2333;border:1px solid #333;color:white;">
-      <button id="btnBuscarRelatorios" class="btn btn-gold">🔍 Buscar</button>
-      <button id="btnLimparBusca" class="btn btn-ghost">Limpar</button>
-    </div>
-
-    <div id="listaRelatorios" style="max-height:600px;overflow-y:auto;"></div>
-  </div>
-
-</main>
-
-<script>
-const WORKER_BASE = "https://ancient-moon-3aa3.pabloads2020.workers.dev";
-
-async function buscarRelatorios(ticker) {
-  const listaDiv = document.getElementById('listaRelatorios');
-  listaDiv.innerHTML = '<div style="text-align:center;padding:40px;color:#888;">⏳ Buscando documentos recentes...</div>';
-
-  try {
-    const resp = await fetch(`${WORKER_BASE}/buscar?ticker=${encodeURIComponent(ticker)}`);
-    const data = await resp.json();
-
-    let docs = data.documentos || [];
-
-    // Filtro básico 2026
-    docs = docs.filter(d => {
-      const dataStr = (d.dataEntrega || d.dataReferencia || '');
-      return dataStr.includes('2026');
-    });
-
-    if (docs.length === 0) {
-      listaDiv.innerHTML = '<div style="padding:30px;text-align:center;color:#f39c12;">Nenhum documento de 2026 encontrado.</div>';
-      return;
-    }
-
-    let html = `<div style="margin:10px 0 15px;font-weight:600;">📄 ${docs.length} documento(s) encontrado(s) em 2026</div>`;
-
-    for (const doc of docs) {
-      const tipo = String(doc.tipo || doc.tipoDocumento || 'Documento');
-      const isGerencial = tipo.toLowerCase().includes('gerencial');
-
-      html += `
-        <div style="padding:14px; margin:6px 0; border:1px solid #333; border-radius:8px; display:flex; justify-content:space-between; align-items:center; ${isGerencial ? 'border-left:4px solid #f5c842;background:rgba(245,200,66,0.1);' : ''}">
-          <div>
-            <strong>${tipo}</strong><br>
-            <small style="color:#aaa">Entrega: ${doc.dataEntrega || '-'} | Ref: ${doc.dataReferencia || '-'}</small>
-          </div>
-          <button class="btn btn-ghost" data-id="${doc.id}" data-nome="${tipo}">📥 Baixar</button>
-        </div>`;
-    }
-
-    listaDiv.innerHTML = html;
-
-    document.querySelectorAll('.btn-ghost').forEach(btn => {
-      btn.addEventListener('click', () => {
-        const id = btn.getAttribute('data-id');
-        const nome = btn.getAttribute('data-nome');
-        baixarEAnalisar(id, nome);
-      });
-    });
-
-  } catch (e) {
-    listaDiv.innerHTML = `<div style="color:red;padding:20px;">❌ Erro: ${e.message}</div>`;
-  }
-}
-
-async function baixarEAnalisar(id, nome) {
-  const overlay = document.getElementById('overlay');
-  overlay.style.display = 'flex';
-  document.getElementById('overlayText').textContent = `Baixando ${nome}...`;
-
-  try {
-    const resp = await fetch(`${WORKER_BASE}/baixar?id=${id}`);
-    const blob = await resp.blob();
-    const file = new File([blob], `${nome}.pdf`, {type: 'application/pdf'});
+    <input type="text" id="ticker" placeholder="KNRI11" maxlength="10">
+    <button onclick="buscarRelatorio()">Buscar</button>
     
-    const dt = new DataTransfer();
-    dt.items.add(file);
-    document.getElementById('filePdf').files = dt.files;
-    document.getElementById('fileName').textContent = file.name;
-    
-    // Dispara análise automática
-    document.getElementById('btnImportar').click();
-  } catch (err) {
-    alert('Erro ao baixar: ' + err.message);
-  } finally {
-    overlay.style.display = 'none';
-  }
-}
+    <div id="resultado"></div>
+    <iframe id="frame" style="display: none;"></iframe>
 
-// Eventos
-document.getElementById('btnBuscarRelatorios').addEventListener('click', () => {
-  const ticker = document.getElementById('tickerBusca').value.trim().toUpperCase();
-  if (ticker) buscarRelatorios(ticker);
-  else alert("Digite um ticker");
-});
-
-document.getElementById('btnLimparBusca').addEventListener('click', () => {
-  document.getElementById('tickerBusca').value = '';
-  document.getElementById('listaRelatorios').innerHTML = '';
-});
-</script>
+    <script>
+        async function buscarRelatorio() {
+            const tickerInput = document.getElementById('ticker');
+            const ticker = tickerInput.value.toUpperCase().trim();
+            const resultado = document.getElementById('resultado');
+            const frame = document.getElementById('frame');
+            
+            if (!ticker) {
+                resultado.innerHTML = '<p class="erro">Digite o ticker!</p>';
+                return;
+            }
+            
+            resultado.innerHTML = '<p class="loading">Buscando no Fundos.Net... Aguarde.</p>';
+            frame.style.display = 'none';
+            
+            try {
+                // Substitua pela URL do seu Cloudflare Worker
+                const workerUrl = `https://seu-worker.seudominio.workers.dev/?ticker=${ticker}`;
+                // Ou use GitHub Pages com proxy se não tiver Worker ainda
+                
+                const response = await fetch(workerUrl);
+                const html = await response.text();
+                
+                if (response.ok) {
+                    frame.src = workerUrl;
+                    frame.style.display = 'block';
+                    resultado.innerHTML = `<p>✅ Encontrado! Veja abaixo ou <a href="${workerUrl}" target="_blank">abra link direto</a>.</p>`;
+                } else {
+                    resultado.innerHTML = `<p class="erro">${html}</p>`;
+                }
+            } catch (error) {
+                resultado.innerHTML = `<p class="erro">Erro: ${error.message}. Verifique o Worker.</p>`;
+            }
+        }
+        
+        // Busca ao Enter
+        document.getElementById('ticker').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') buscarRelatorio();
+        });
+    </script>
 </body>
 </html>
