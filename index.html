@@ -4,115 +4,106 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Leitor de Relatórios Gerenciais · FIIs</title>
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
-/* ===== SEU CSS INTEIRO (SEM ALTERAÇÃO) ===== */
-/* ... mantido igual ao seu código ... */
+body{margin:0;font-family:DM Sans,sans-serif;background:#0e1117;color:#e8eaf0}
+.header{padding:15px;background:#161b25;color:#fff}
+.card{background:#161b25;margin:15px;padding:15px;border-radius:10px}
+.btn{padding:10px 15px;border:0;border-radius:8px;cursor:pointer}
+.btn-gold{background:#f5c842;color:#000}
+.btn-ghost{background:#222;color:#fff}
+input{padding:10px;width:100%;border-radius:8px;border:1px solid #333;background:#0e1117;color:#fff}
+.status{margin-top:10px;font-size:14px}
+.relatorio-item{padding:10px;border-bottom:1px solid #333;display:flex;justify-content:space-between}
 </style>
 </head>
 
 <body>
 
-<!-- ===== SEU HTML INTEIRO (SEM ALTERAÇÃO) ===== -->
+<div class="header">Leitor de FIIs</div>
+
+<div class="card">
+  <h3>Buscar relatórios</h3>
+  <input id="tickerBusca" placeholder="Ex: KNRI11">
+  <br><br>
+  <button class="btn btn-gold" id="btnBuscarRelatorios">Buscar</button>
+  <div id="statusBusca" class="status"></div>
+  <div id="listaRelatorios"></div>
+</div>
 
 <script>
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
 const WORKER_BASE = "https://ancient-moon-3aa3.pabloads2020.workers.dev";
 
-/* ===== UTIL ===== */
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  return String(str)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+/* STATUS */
+function setStatusBusca(msg){
+  document.getElementById("statusBusca").innerHTML = msg;
 }
 
-/* ═════════════════════════════════════════════════════
-   🔥 FIX PRINCIPAL (AQUI ESTAVA O ERRO)
-   ═════════════════════════════════════════════════════ */
-
-document.getElementById('btnBuscarRelatorios').addEventListener('click', async () => {
-  const ticker = document.getElementById('tickerBusca').value.trim().toUpperCase();
-  if (!ticker) {
-    setStatusBusca('Digite um ticker (ex: HGBS11)', 'err');
+/* BOTÃO BUSCAR */
+document.getElementById("btnBuscarRelatorios").addEventListener("click", async () => {
+  const ticker = document.getElementById("tickerBusca").value.trim().toUpperCase();
+  if(!ticker){
+    setStatusBusca("Digite um ticker");
     return;
   }
 
-  const btn = document.getElementById('btnBuscarRelatorios');
-  btn.disabled = true;
-  btn.textContent = '⏳ Buscando...';
-
-  const listaDiv = document.getElementById('listaRelatorios');
-  listaDiv.innerHTML = '<div style="padding:1rem;text-align:center;color:var(--text3);">🔍 Consultando...</div>';
+  const listaDiv = document.getElementById("listaRelatorios");
+  listaDiv.innerHTML = "Carregando...";
 
   try {
     const resp = await fetch(`${WORKER_BASE}?ticker=${encodeURIComponent(ticker)}`);
 
-    /* ✅ FIX 1: valida primeiro status */
-    if (!resp.ok) {
-      throw new Error(`HTTP ${resp.status}`);
+    if(!resp.ok){
+      throw new Error("HTTP " + resp.status);
     }
 
-    /* ✅ FIX 2: parse seguro */
-    let data;
     const text = await resp.text();
 
+    let data;
     try {
       data = JSON.parse(text);
-    } catch (e) {
-      console.error("Resposta inválida do Worker:", text);
-      throw new Error("Worker retornou resposta inválida (não JSON)");
+    } catch(e){
+      console.log("Resposta inválida:", text);
+      throw new Error("Worker não retornou JSON válido");
     }
 
-    /* fallback de erro vindo do backend */
-    if (data?.erro || data?.error) {
+    if(data?.erro || data?.error){
       throw new Error(data.erro || data.error);
     }
 
-    const docs = data.documentos || data.relatorios || [];
+    const docs = data.documentos || [];
 
-    if (!docs.length) {
-      listaDiv.innerHTML = '<div style="padding:1rem;color:var(--text3);">Nenhum relatório encontrado.</div>';
+    if(!docs.length){
+      listaDiv.innerHTML = "Nenhum relatório encontrado";
       return;
     }
 
-    let html = `<div style="margin-bottom:.75rem;">📄 ${docs.length} relatório(s):</div>`;
+    let html = "";
 
-    docs.forEach(doc => {
+    docs.forEach(doc=>{
       html += `
         <div class="relatorio-item">
           <div>
-            <strong>${escapeHtml(doc.dataReferencia || '—')}</strong><br>
-            <small>ID: ${escapeHtml(String(doc.id))}</small>
+            <strong>${doc.dataReferencia || "—"}</strong><br>
+            <small>ID: ${doc.id}</small>
           </div>
-          <button class="btn btn-gold btn-baixar" data-id="${escapeHtml(String(doc.id))}">
-            📥 Baixar
-          </button>
-        </div>`;
+          <button class="btn btn-gold">Baixar</button>
+        </div>
+      `;
     });
 
     listaDiv.innerHTML = html;
 
-    document.querySelectorAll('.btn-baixar').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const id = btn.getAttribute('data-id');
-        await baixarEAnalisar(id, ticker);
-      });
-    });
+    setStatusBusca("OK: " + docs.length + " relatório(s)");
 
-  } catch (err) {
-    listaDiv.innerHTML = `<div style="padding:1rem;color:var(--red);">❌ ${escapeHtml(err.message)}</div>`;
-  } finally {
-    btn.disabled = false;
-    btn.textContent = '🔍 Buscar';
+  } catch(err){
+    listaDiv.innerHTML = "Erro: " + err.message;
   }
 });
-
-/* ===== RESTANTE DO SEU SCRIPT CONTINUA IGUAL ===== */
-
 </script>
+
 </body>
 </html>
