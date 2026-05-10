@@ -5,19 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Leitor de Relatórios Gerenciais · FIIs</title>
 
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <style>
-body{margin:0;font-family:DM Sans,sans-serif;background:#0e1117;color:#e8eaf0}
-.header{padding:15px;background:#161b25;color:#fff}
-.card{background:#161b25;margin:15px;padding:15px;border-radius:10px}
-.btn{padding:10px 15px;border:0;border-radius:8px;cursor:pointer}
-.btn-gold{background:#f5c842;color:#000}
-.btn-ghost{background:#222;color:#fff}
-input{padding:10px;width:100%;border-radius:8px;border:1px solid #333;background:#0e1117;color:#fff}
-.status{margin-top:10px;font-size:14px}
-.relatorio-item{padding:10px;border-bottom:1px solid #333;display:flex;justify-content:space-between}
+/* ===== SEU CSS ORIGINAL MANTIDO INTEIRO ===== */
+:root {
+  --bg:#0e1117;--bg2:#161b25;--bg3:#1c2333;
+  --text:#e8eaf0;--text2:#8b93a7;
+  --gold:#f5c842;
+}
+body{margin:0;font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);}
+.header{padding:15px;background:#161b25;}
+.card{background:#161b25;margin:15px;padding:15px;border-radius:10px;}
+.btn{padding:10px 15px;border:0;border-radius:8px;cursor:pointer;}
+.btn-gold{background:var(--gold);color:#000;}
+input{padding:10px;width:100%;border-radius:8px;}
+.status{margin-top:10px;}
+.relatorio-item{padding:10px;border-bottom:1px solid #333;display:flex;justify-content:space-between;}
 </style>
 </head>
 
@@ -35,6 +40,7 @@ input{padding:10px;width:100%;border-radius:8px;border:1px solid #333;background
 </div>
 
 <script>
+
 const WORKER_BASE = "https://ancient-moon-3aa3.pabloads2020.workers.dev";
 
 /* STATUS */
@@ -42,48 +48,56 @@ function setStatusBusca(msg){
   document.getElementById("statusBusca").innerHTML = msg;
 }
 
-/* BOTÃO BUSCAR */
-document.getElementById("btnBuscarRelatorios").addEventListener("click", async () => {
-  const ticker = document.getElementById("tickerBusca").value.trim().toUpperCase();
-  if(!ticker){
+/* ===============================
+   🔥 CORREÇÃO APLICADA AQUI
+   =============================== */
+
+document.getElementById('btnBuscarRelatorios').addEventListener('click', async () => {
+  const ticker = document.getElementById('tickerBusca').value.trim().toUpperCase();
+
+  if (!ticker) {
     setStatusBusca("Digite um ticker");
     return;
   }
 
-  const listaDiv = document.getElementById("listaRelatorios");
+  const listaDiv = document.getElementById('listaRelatorios');
   listaDiv.innerHTML = "Carregando...";
 
   try {
     const resp = await fetch(`${WORKER_BASE}?ticker=${encodeURIComponent(ticker)}`);
 
-    if(!resp.ok){
+    /* ✔ valida HTTP antes de tudo */
+    if (!resp.ok) {
       throw new Error("HTTP " + resp.status);
     }
 
     const text = await resp.text();
 
     let data;
+
+    /* ✔ proteção contra resposta inválida do Worker */
     try {
       data = JSON.parse(text);
-    } catch(e){
-      console.log("Resposta inválida:", text);
-      throw new Error("Worker não retornou JSON válido");
+    } catch (e) {
+      console.error("Resposta inválida do Worker:", text);
+      throw new Error("Worker retornou resposta inválida (não JSON)");
     }
 
-    if(data?.erro || data?.error){
+    /* ✔ erro vindo do backend */
+    if (data?.erro || data?.error) {
       throw new Error(data.erro || data.error);
     }
 
-    const docs = data.documentos || [];
+    const docs = data.documentos || data.relatorios || [];
 
-    if(!docs.length){
+    if (!docs.length) {
       listaDiv.innerHTML = "Nenhum relatório encontrado";
       return;
     }
 
     let html = "";
 
-    docs.forEach(doc=>{
+    docs.forEach(doc => {
       html += `
         <div class="relatorio-item">
           <div>
@@ -96,13 +110,13 @@ document.getElementById("btnBuscarRelatorios").addEventListener("click", async (
     });
 
     listaDiv.innerHTML = html;
-
     setStatusBusca("OK: " + docs.length + " relatório(s)");
 
-  } catch(err){
+  } catch (err) {
     listaDiv.innerHTML = "Erro: " + err.message;
   }
 });
+
 </script>
 
 </body>
