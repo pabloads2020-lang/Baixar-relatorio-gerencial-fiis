@@ -103,18 +103,18 @@ body { font-family: 'DM Sans', 'Atkinson Hyperlegible', sans-serif; background: 
     <div class="api-status" id="apiStatus"></div>
   </div>
 
-  <!-- Card: Buscar relatórios no Fundos.NET -->
+  <!-- Card: Buscar relatórios no Fundos.NET via Worker (3 mais recentes) -->
   <div class="card">
-    <div class="card-title">📄 Buscar Relatórios Gerenciais (3 mais recentes)</div>
+    <div class="card-title">📄 Buscar Relatórios Gerenciais (3 últimos)</div>
     <div class="api-row">
-      <input type="text" id="tickerBusca" class="api-input" placeholder="Digite o ticker do FII (ex: HGLG11)" style="flex:2">
+      <input type="text" id="tickerBusca" class="api-input" placeholder="Digite o ticker (ex: HGLG11)" style="flex:2">
       <button id="btnBuscarRelatorios" class="btn btn-gold">🔍 Buscar</button>
       <button id="btnLimparBusca" class="btn btn-ghost">Limpar</button>
     </div>
     <div id="listaRelatorios" style="margin-top:1rem; max-height:400px; overflow-y:auto;"></div>
   </div>
 
-  <!-- Card: Upload e análise (igual ao original) -->
+  <!-- Card: Upload e análise (original) -->
   <div class="card">
     <div class="card-title">📄 Importar relatório gerencial de FII (PDF)</div>
     <div class="drop-zone" id="dropZone">📂 Arraste o PDF ou clique aqui</div>
@@ -139,31 +139,15 @@ body { font-family: 'DM Sans', 'Atkinson Hyperlegible', sans-serif; background: 
   </div>
 </main>
 
-<footer class="footer">Análise de FIIs com Gemini · Busca no Fundos.NET via proxy · Chave local</footer>
+<footer class="footer">Análise de FIIs com Gemini · Busca via Worker · Chave local</footer>
 
 <script>
-// Configuração do proxy (público, pode ser instável; troque pelo seu Worker se tiver)
-// Para usar um proxy mais confiável, recomenda-se hospedar seu próprio Worker.
-// URL do proxy CORS (free, limitado). Se falhar, troque por: https://cors-anywhere.herokuapp.com/
-const PROXY_URL = "https://cors-anywhere.herokuapp.com/";
-const FUNDOS_NET_API = "https://fnet.bmfbovespa.com.br/fnet/publico/pesquisarGerenciadorDocumentosDados?";
-
-// Mapeamento ticker -> CNPJ (mesmo do seu Worker)
-const tickerMap = {
-  "AFHI11": "36.642.293/0001-58", "ALZR11": "28.737.771/0001-85", "BCIA11": "20.216.935/0001-17",
-  "BRCO11": "20.748.515/0001-81", "BTCI11": "09.552.812/0001-14", "BTLG11": "11.839.593/0001-09",
-  "CPTS11": "18.979.895/0001-13", "FIIB11": "14.217.108/0001-45", "FIIP11": "08.696.175/0001-97",
-  "HFOF11": "18.307.582/0001-19", "HGBS11": "08.431.747/0001-06", "HGCR11": "11.160.521/0001-22",
-  "HGLG11": "11.728.688/0001-47", "HGRE11": "09.072.017/0001-29", "HGRU11": "29.641.226/0001-53",
-  "HSML11": "32.892.018/0001-31", "HTMX11": "08.706.065/0001-69", "KNRI11": "12.005.956/0001-65",
-  "KNSC11": "35.864.448/0001-38", "MXRF11": "97.521.225/0001-25", "PMLL11": "26.499.833/0001-32",
-  "PSEC11": "35.507.457/0001-71", "RBRR11": "29.467.977/0001-03", "RECR11": "28.152.272/0001-26",
-  "TGAR11": "25.032.881/0001-53", "TRXF11": "28.548.288/0001-52", "VISC11": "17.554.274/0001-25",
-  "XPLG11": "26.502.794/0001-85", "XPML11": "28.757.546/0001-00"
-};
-
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
+// Configuração do Worker (seu próprio Worker)
+const WORKER_BASE = "https://ancient-moon-3aa3.pabloads2020.workers.dev";
+
+// Estado global
 const App = { processando: false, clockInterval: null };
 let debugContent = [];
 function dbg(txt) { debugContent.push(txt); document.getElementById('debugBox').textContent = debugContent.join('\n'); }
@@ -179,46 +163,23 @@ document.getElementById('btnSalvarKey').addEventListener('click', () => { const 
 document.getElementById('apiEye').addEventListener('click', () => { const inp = document.getElementById('apiKeyInput'); inp.type = inp.type === 'password' ? 'text' : 'password'; });
 updateApiStatusUI();
 
-// Função para buscar relatórios usando proxy
+// ========== FUNÇÕES DE BUSCA VIA WORKER ==========
 async function buscarRelatorios(ticker) {
-  const tickerUpper = ticker.toUpperCase();
-  const cnpj = tickerMap[tickerUpper];
-  if (!cnpj) throw new Error(`Ticker ${tickerUpper} não encontrado no mapeamento.`);
-  const cnpjLimpo = cnpj.replace(/[.\-\/]/g, '');
-  const url = `${PROXY_URL}${FUNDOS_NET_API}cnpjFundo=${cnpjLimpo}&tipoFundo=1&l=200&d=1&s=0`;
-  const resp = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-  if (!resp.ok) throw new Error(`Erro HTTP ${resp.status} ao acessar Fundos.NET`);
+  const resp = await fetch(`${WORKER_BASE}/buscar?ticker=${encodeURIComponent(ticker)}`);
+  if (!resp.ok) throw new Error(`Worker respondeu com status ${resp.status}`);
   const data = await resp.json();
-  const docs = data.data || [];
-  const relatorios = docs
-    .filter(doc => doc.tipoDocumento === "Relatório Gerencial")
-    .map(doc => {
-      let dataEntregaISO = "";
-      if (doc.dataEntrega) {
-        const partes = doc.dataEntrega.split(" ")[0].split("/");
-        if (partes.length === 3) dataEntregaISO = `${partes[2]}-${partes[1]}-${partes[0]}`;
-      }
-      return {
-        id: doc.id,
-        tipo: doc.tipoDocumento,
-        dataEntrega: doc.dataEntrega ? doc.dataEntrega.split(" ")[0] : "",
-        dataEntregaISO: dataEntregaISO,
-        dataReferencia: doc.dataReferencia || ""
-      };
-    });
-  // Ordena por data (mais recente primeiro) e pega os 3 primeiros
-  relatorios.sort((a,b) => (b.dataEntregaISO || "").localeCompare(a.dataEntregaISO || ""));
-  return relatorios.slice(0, 3);
+  if (data.erro) throw new Error(data.erro);
+  if (!data.documentos || !Array.isArray(data.documentos)) throw new Error('Resposta inválida do Worker');
+  const docs = data.documentos.filter(d => d.tipo === "Relatório Gerencial");
+  docs.sort((a,b) => (b.dataEntrega || "").localeCompare(a.dataEntrega || ""));
+  return docs.slice(0, 3);
 }
 
-// Função para baixar PDF via proxy e carregar no input file
 async function baixarEAnalisar(id, nomeRelatorio) {
   setOverlay(true, `Baixando ${nomeRelatorio}...`);
   try {
-    const pdfUrl = `https://fnet.bmfbovespa.com.br/fnet/publico/downloadDocumento?id=${id}`;
-    const proxyUrl = `${PROXY_URL}${pdfUrl}`;
-    const resp = await fetch(proxyUrl, { headers: { "X-Requested-With": "XMLHttpRequest" } });
-    if (!resp.ok) throw new Error(`Falha ao baixar PDF: ${resp.status}`);
+    const resp = await fetch(`${WORKER_BASE}/baixar?id=${id}`);
+    if (!resp.ok) throw new Error(`Erro ao baixar: ${resp.status}`);
     const blob = await resp.blob();
     const file = new File([blob], `relatorio_${id}.pdf`, { type: 'application/pdf' });
     const dataTransfer = new DataTransfer();
@@ -227,7 +188,6 @@ async function baixarEAnalisar(id, nomeRelatorio) {
     fileInput.files = dataTransfer.files;
     document.getElementById('fileName').textContent = file.name;
     setStatus(`✅ PDF "${nomeRelatorio}" carregado. Iniciando análise...`, 'ok');
-    // Dispara a análise automaticamente
     document.getElementById('btnImportar').click();
   } catch (err) {
     setOverlay(false);
@@ -237,9 +197,8 @@ async function baixarEAnalisar(id, nomeRelatorio) {
   }
 }
 
-// Evento de busca
 document.getElementById('btnBuscarRelatorios').addEventListener('click', async () => {
-  const ticker = document.getElementById('tickerBusca').value.trim();
+  const ticker = document.getElementById('tickerBusca').value.trim().toUpperCase();
   if (!ticker) { setStatus('Digite um ticker (ex: HGLG11)', 'err'); return; }
   const listaDiv = document.getElementById('listaRelatorios');
   listaDiv.innerHTML = '<div style="padding:1rem; text-align:center;">⏳ Buscando relatórios...</div>';
@@ -258,7 +217,6 @@ document.getElementById('btnBuscarRelatorios').addEventListener('click', async (
         </div>`;
     }
     listaDiv.innerHTML = html;
-    // Adiciona eventos aos botões
     document.querySelectorAll('.btn-baixar').forEach(btn => {
       btn.addEventListener('click', async (e) => {
         const id = btn.getAttribute('data-id');
@@ -277,12 +235,7 @@ document.getElementById('btnLimparBusca').addEventListener('click', () => {
   document.getElementById('listaRelatorios').innerHTML = '';
 });
 
-// ========== TODO O RESTANTE DO SCRIPT (extração PDF, análise Gemini, cache, renderização) ==========
-// Inclua aqui as mesmas funções do seu HTML original: extrairTextoPDF, analisarComGemini,
-// renderResultados, cache, etc. Para não estourar o limite, vou copiar apenas as funções essenciais
-// (você já tem o código completo, vou manter a mesma estrutura).
-
-// Função de extração de texto do PDF (idêntica à sua)
+// ========== TODAS AS FUNÇÕES DE ANÁLISE (EXTRAÇÃO PDF, GEMINI, CACHE, RENDER) ==========
 const TEXTO_MAX = 400000;
 function normalizarTexto(texto) { return texto.replace(/[\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim(); }
 async function extrairTextoPDF(file) {
@@ -302,24 +255,126 @@ async function extrairTextoPDF(file) {
   return normalizado.substring(0, TEXTO_MAX);
 }
 
-async function analisarComGemini(textoPDF, apiKey) { /* igual ao seu, com prompt completo */ 
-  // Devido ao tamanho, vou manter a mesma lógica que você já tem. 
-  // Por brevidade, aqui vai um resumo: a função faz fetch para a API Gemini com o prompt completo.
-  // Utilize exatamente a mesma função que estava no código original.
-  // (Se quiser, posso reinserir todo o prompt – mas a mensagem já está longa; replicarei se necessário)
+async function analisarComGemini(textoPDF, apiKey) {
+  dbg('🤖 Enviando para Gemini...');
+  const prompt = `Você é um analista especialista em FIIs. Extraia do relatório gerencial as informações no formato JSON abaixo. Retorne APENAS o JSON, sem texto extra.
+{
+  "ticker": "string",
+  "gestora": "string",
+  "tipo_fii": "string",
+  "periodo_referencia": "string",
+  "vacancia_fisica": "string",
+  "vacancia_financeira": "string",
+  "inadimplencia": "string",
+  "ltv": "string",
+  "divida_pl": "string",
+  "custo_divida": "string",
+  "prazo_medio_divida": "string",
+  "prazo_medio_cri": "string",
+  "distribuicao": "string",
+  "resultado_distribuivel": "string",
+  "receita_total": "string",
+  "despesas_totais": "string",
+  "saldo_caixa": "string",
+  "num_imoveis": "string",
+  "num_cris": "string",
+  "num_inquilinos": "string",
+  "abl_total": "string",
+  "saida_inquilino": "string",
+  "entrada_inquilino": "string",
+  "reajustes": "string",
+  "parcelas_pagar": "string",
+  "principais_riscos": "string",
+  "pontos_positivos": "string",
+  "resumo_analista": "string",
+  "comentario_gestor": "string"
 }
-// --- ATENÇÃO: Copie aqui na íntegra as funções: analisarComGemini, extrairNumero, formatarValorFinanceiro,
-// colorVacancia, colorLTV, colorInadimplencia, semaforoHTML, cardComSemaforo, renderResultados,
-// e todo o restante (hash, cache, modal, botão importar, etc.) do seu HTML original.
-// Como você já tinha o código completo funcionando, mantenha-o exatamente igual.
+Use null se não encontrar. Seja preciso.
+RELATÓRIO:\n${textoPDF}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+  const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 8192 } };
+  for(let t=1; t<=3; t++) {
+    if(t>1) await new Promise(r=>setTimeout(r, 5000));
+    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if(!resp.ok) { const err = await resp.text(); dbg(`Erro API (${resp.status}): ${err.substring(0,200)}`); if(t===3) throw new Error(`Falha na Gemini: ${resp.status}`); continue; }
+    const data = await resp.json();
+    const raw = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    let jsonStr = raw.replace(/```json\s*/i,'').replace(/```\s*/i,'').trim();
+    try { return JSON.parse(jsonStr); } catch(e) {
+      const match = jsonStr.match(/\{[\s\S]*\}/);
+      if(match) try { return JSON.parse(match[0]); } catch(e2) {}
+      if(t===3) throw new Error('Resposta não é JSON válido');
+    }
+  }
+  throw new Error('Tentativas esgotadas');
+}
 
-// Para não repetir 4000 linhas, recomendo que você mesmo cole as funções que já estavam no final do seu script.
-// O que mudou foram os cards de busca e a lógica de proxy. Todo o resto da análise Gemini permanece idêntico.
+function extrairNumero(val) { if(!val) return null; const n=parseFloat(String(val).replace(/[^\d,.-]/g,'').replace(',','.')); return isNaN(n)?null:n; }
+function formatarValorFinanceiro(val) { if(!val||val==='null') return val; const str=String(val).trim(); if(/[R$%a-zA-ZÀ-ÿ\/+]/.test(str)) return str; const semPontuacao=str.replace(/\./g,'').replace(',','.'); const num=parseFloat(semPontuacao); if(isNaN(num)) return str; if(Math.abs(num)<1000 && str.includes(',')) return str; if(Math.abs(num)>=1000) { const temDecimal=!Number.isInteger(num); return num.toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:temDecimal?2:0,maximumFractionDigits:temDecimal?2:0}); } return str; }
+function colorVacancia(val) { const n=extrairNumero(val); if(n===null) return ''; return n<=5?'ok':n<=20?'neutro':'alerta'; }
+function colorLTV(val, tipo) { const n=extrairNumero(val); if(n===null) return ''; const {isPapel}=detectarTipoFundo(tipo); if(isPapel) return n<=60?'ok':n<=70?'neutro':'alerta'; return n<=10?'ok':n<=20?'neutro':'alerta'; }
+function colorInadimplencia(val) { const n=extrairNumero(val); if(n===null||n===0) return 'ok'; return n<=10?'ok':n<=20?'neutro':'alerta'; }
+function semaforoHTML(cor,pct) { if(!cor) return ''; const labels={ok:'✅ SAUDÁVEL',neutro:'⚠️ ATENÇÃO',alerta:'🔴 CRÍTICO'}; return `<div class="semaforo-bar"><div class="semaforo-fill ${cor}" style="width:${Math.min(Math.max(pct,4),100)}%"></div></div><div class="semaforo-label ${cor}">${labels[cor]}</div>`; }
+function cardComSemaforo(label,val,cor,pct) { if(!val) return ''; return `<div class="result-card"><div class="result-label">${label}</div><div class="result-value small ${cor}">${escapeHtml(String(val))}</div>${semaforoHTML(cor,pct)}</div>`; }
 
-// Exemplo de chamada do botão importar (já existe no seu código). 
-// Vou apenas garantir que o restante do script seja o mesmo.
+function renderResultados(d) {
+  document.getElementById('fundoIdentificado').innerHTML = (d.ticker?`<span class="fundo-ticker">${escapeHtml(d.ticker)}</span>`:'')+(d.gestora?`<span> ${escapeHtml(d.gestora)}</span>`:'');
+  let html = '';
+  const vac = colorVacancia(d.vacancia_fisica); const nVac = extrairNumero(d.vacancia_fisica)||0;
+  html += cardComSemaforo('📊 Vacância Física', d.vacancia_fisica, vac, nVac*2);
+  const vacFin = colorVacancia(d.vacancia_financeira); const nVacFin = extrairNumero(d.vacancia_financeira)||0;
+  html += cardComSemaforo('💰 Vacância Financeira', d.vacancia_financeira, vacFin, nVacFin*2);
+  const inad = colorInadimplencia(d.inadimplencia); const nInad = extrairNumero(d.inadimplencia)||0;
+  html += cardComSemaforo('⚠️ Inadimplência', d.inadimplencia, inad, nInad*2);
+  const ltvCor = colorLTV(d.ltv, d.tipo_fii); const nLTV = extrairNumero(d.ltv)||0;
+  html += cardComSemaforo('🏦 LTV', d.ltv, ltvCor, nLTV);
+  ['distribuicao','resultado_distribuivel','receita_total','despesas_totais','saldo_caixa','num_imoveis','num_inquilinos','abl_total','tipo_fii','num_cris','prazo_medio_cri'].forEach(k => { if(d[k] && d[k]!=='null') html += `<div class="result-card"><div class="result-label">${k.replace(/_/g,' ').toUpperCase()}</div><div class="result-value small">${escapeHtml(d[k])}</div></div>`; });
+  if(d.divida_pl || d.custo_divida || d.prazo_medio_divida) {
+    html += `<div class="divida-card"><div class="result-label">🏦 Estrutura de Dívida</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.5rem;">${d.divida_pl?`<div><div class="result-label">Dívida/PL</div><div>${escapeHtml(d.divida_pl)}</div></div>`:''}${d.custo_divida?`<div><div class="result-label">Custo da Dívida</div><div>${escapeHtml(d.custo_divida)}</div></div>`:''}${d.prazo_medio_divida?`<div><div class="result-label">Prazo Médio</div><div>${escapeHtml(d.prazo_medio_divida)}</div></div>`:''}</div></div>`;
+  }
+  if(d.resumo_analista) html += `<div class="resumo-box"><div class="result-label">🤖 Análise do Relatório</div><div>${escapeHtml(d.resumo_analista)}</div></div>`;
+  if(d.pontos_positivos) html += `<div class="positivos-box"><div class="result-label">✅ Pontos Positivos</div><ul>${d.pontos_positivos.split('|').map(s=>`<li>${escapeHtml(s.trim())}</li>`).join('')}</ul></div>`;
+  if(d.principais_riscos) html += `<div class="riscos-box"><div class="result-label">⚠️ Riscos</div><ul>${d.principais_riscos.split('|').map(s=>`<li>${escapeHtml(s.trim())}</li>`).join('')}</ul></div>`;
+  if(d.comentario_gestor && d.comentario_gestor!=='null') html += `<div class="comentario-box"><div class="result-label">💬 Comentário do Gestor</div><div>${escapeHtml(d.comentario_gestor)}</div></div>`;
+  document.getElementById('resultadosConteudo').innerHTML = html;
+  document.getElementById('resultArea').style.display = 'block';
+}
 
-console.log("Sistema pronto. Use o card 'Buscar Relatórios' para obter os 3 mais recentes.");
+// Cache
+const CACHE_PREFIX = 'leitor_fii_cache_';
+async function hashArquivoSHA256(file) { const ab = await file.arrayBuffer(); if(!crypto.subtle) return `fallback_${file.name}_${file.size}`; const hash = await crypto.subtle.digest('SHA-256', ab); return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
+function getCachedAnalysis(hash) { try { const raw = localStorage.getItem(CACHE_PREFIX+hash); return raw?JSON.parse(raw):null; } catch(e){return null;} }
+function saveCachedAnalysis(hash, data) { try { localStorage.setItem(CACHE_PREFIX+hash, JSON.stringify({data, ts:Date.now()})); } catch(e){} }
+function mostrarModalCache(cachedTs) { return new Promise(resolve => { const modal = document.getElementById('cacheModal'); document.getElementById('cacheModalBody').innerHTML = `Análise anterior (${new Date(cachedTs).toLocaleString()}). Usar cache?`; modal.classList.add('show'); const use = () => { modal.classList.remove('show'); resolve(true); }; const reproc = () => { modal.classList.remove('show'); resolve(false); }; document.getElementById('cacheModalUse').onclick = use; document.getElementById('cacheModalReprocess').onclick = reproc; }); }
+
+document.getElementById('btnImportar').addEventListener('click', async () => {
+  if(App.processando) return;
+  const file = document.getElementById('filePdf').files[0];
+  const apiKey = getApiKey();
+  if(!file) { setStatus('Selecione um PDF', 'err'); return; }
+  if(!validarApiKey(apiKey)) { setStatus('Configure sua chave API', 'err'); return; }
+  App.processando = true; document.getElementById('btnImportar').disabled = true; debugContent=[]; setOverlay(true, 'Preparando...');
+  try {
+    const fileHash = await hashArquivoSHA256(file);
+    const cached = getCachedAnalysis(fileHash);
+    if(cached) { setOverlay(false); if(await mostrarModalCache(cached.ts)) { renderResultados(cached.data); setStatus('✅ Cache usado', 'ok'); return; } setOverlay(true, 'Reprocessando...'); }
+    const texto = await extrairTextoPDF(file);
+    if(texto.length < 100) throw new Error('PDF sem texto');
+    setOverlay(true, 'Analisando com Gemini...');
+    const dados = await analisarComGemini(texto, apiKey);
+    saveCachedAnalysis(fileHash, dados);
+    renderResultados(dados);
+    setStatus(`✅ Análise concluída: ${dados.ticker || 'FII'}`, 'ok');
+  } catch(e) { setStatus('❌ '+e.message, 'err', 20000); dbg('ERRO: '+e.message); document.getElementById('debugBox').classList.add('show'); } finally { setOverlay(false); App.processando = false; document.getElementById('btnImportar').disabled = false; }
+});
+
+document.getElementById('btnLimpar').addEventListener('click', () => { document.getElementById('filePdf').value = ''; document.getElementById('fileName').textContent = 'Selecionar arquivo...'; document.getElementById('resultArea').style.display = 'none'; document.getElementById('status').classList.remove('show'); debugContent=[]; document.getElementById('debugBox').classList.remove('show'); });
+document.getElementById('btnToggleDebug').addEventListener('click', () => { document.getElementById('debugBox').classList.toggle('show'); });
+function applyTheme(theme) { document.body.classList.toggle('light', theme==='light'); document.getElementById('themeToggle').textContent = theme==='light' ? '☀️' : '🌙'; }
+document.getElementById('themeToggle').addEventListener('click', () => { const novoTema = document.body.classList.contains('light') ? 'dark' : 'light'; applyTheme(novoTema); localStorage.setItem('theme', novoTema); });
+applyTheme(localStorage.getItem('theme') || 'dark');
+function atualizarRelogio() { document.getElementById('hDate').textContent = new Date().toLocaleString('pt-BR'); }
+atualizarRelogio(); setInterval(atualizarRelogio, 1000);
 </script>
 </body>
 </html>
