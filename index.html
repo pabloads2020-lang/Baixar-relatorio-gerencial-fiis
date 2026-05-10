@@ -7,7 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <style>
-/* ===== ESTILOS (idênticos ao seu original, compactados) ===== */
+/* ===== ESTILOS ===== */
 :root { --bg: #0e1117; --bg2: #161b25; --bg3: #1c2333; --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.13); --gold: #f5c842; --gold2: #e0a800; --text: #e8eaf0; --text2: #8b93a7; --text3: #555e72; --green: #2ecc71; --green-bg: rgba(46,204,113,0.12); --red: #e74c3c; --red-bg: rgba(231,76,60,0.12); --amber: #f39c12; --amber-bg: rgba(243,156,18,0.12); --blue: #3498db; --blue-bg: rgba(52,152,219,0.12); --header-bg: #161b25; --header-border: rgba(255,255,255,0.07); --card-bg: #161b25; --card-border: rgba(255,255,255,0.07); --input-bg: #1c2333; --input-border: rgba(255,255,255,0.13); --debug-bg: #1c2333; --overlay-bg: rgba(14,17,23,.92); --footer-border: rgba(255,255,255,0.07); --result-item-bg: #1c2333; }
 body.light { --bg: #f5f7fa; --bg2: #ffffff; --bg3: #f0f2f5; --border: rgba(0,0,0,0.08); --border2: rgba(0,0,0,0.12); --gold: #d4a017; --gold2: #b8860b; --text: #1a1a2e; --text2: #4a5568; --text3: #718096; --green: #27ae60; --green-bg: rgba(39,174,96,0.1); --red: #e74c3c; --red-bg: rgba(231,76,60,0.1); --amber: #e67e22; --amber-bg: rgba(230,126,34,0.1); --header-bg: #ffffff; --header-border: rgba(0,0,0,0.08); --card-bg: #ffffff; --card-border: rgba(0,0,0,0.08); --input-bg: #ffffff; --input-border: #e2e8f0; --debug-bg: #f7fafc; --overlay-bg: rgba(255,255,255,.95); --footer-border: rgba(0,0,0,0.08); --result-item-bg: #f7fafc; }
 * { box-sizing: border-box; margin: 0; padding: 0; transition: background 0.2s, color 0.2s; }
@@ -92,7 +92,6 @@ body { font-family: 'DM Sans', 'Atkinson Hyperlegible', sans-serif; background: 
 </header>
 
 <main class="main">
-  <!-- Card: API Key -->
   <div class="card">
     <div class="card-title">🔑 Configuração da API Gemini <span>Gratuita · Chave local</span></div>
     <div class="info-box">💡 Sua chave fica salva apenas no navegador. Obtenha em <a href="https://aistudio.google.com/app/apikey" target="_blank">Google AI Studio</a>.</div>
@@ -103,7 +102,6 @@ body { font-family: 'DM Sans', 'Atkinson Hyperlegible', sans-serif; background: 
     <div class="api-status" id="apiStatus"></div>
   </div>
 
-  <!-- Card: Buscar relatórios no Fundos.NET via Worker (3 mais recentes) -->
   <div class="card">
     <div class="card-title">📄 Buscar Relatórios Gerenciais (3 últimos)</div>
     <div class="api-row">
@@ -114,7 +112,6 @@ body { font-family: 'DM Sans', 'Atkinson Hyperlegible', sans-serif; background: 
     <div id="listaRelatorios" style="margin-top:1rem; max-height:400px; overflow-y:auto;"></div>
   </div>
 
-  <!-- Card: Upload e análise (original) -->
   <div class="card">
     <div class="card-title">📄 Importar relatório gerencial de FII (PDF)</div>
     <div class="drop-zone" id="dropZone">📂 Arraste o PDF ou clique aqui</div>
@@ -132,7 +129,6 @@ body { font-family: 'DM Sans', 'Atkinson Hyperlegible', sans-serif; background: 
     </div>
   </div>
 
-  <!-- Card: Resultado da análise -->
   <div id="resultArea" class="card" style="display:none">
     <div class="card-title">📊 Análise do Relatório Gerencial<div style="display:flex;gap:8px;"><span id="fundoIdentificado"></span><span class="ai-badge">✨ Gemini AI</span><button class="btn-ghost" onclick="window.print()">🖨️ Exportar</button></div></div>
     <div id="resultadosConteudo" class="resultados-grid"></div>
@@ -144,12 +140,10 @@ body { font-family: 'DM Sans', 'Atkinson Hyperlegible', sans-serif; background: 
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-// Configuração do Worker (seu próprio Worker)
 const WORKER_BASE = "https://ancient-moon-3aa3.pabloads2020.workers.dev";
-
-// Estado global
 const App = { processando: false, clockInterval: null };
 let debugContent = [];
+
 function dbg(txt) { debugContent.push(txt); document.getElementById('debugBox').textContent = debugContent.join('\n'); }
 function clearDebug() { debugContent = []; document.getElementById('debugBox').textContent = ''; }
 function setStatus(msg, tipo, durationMs) { const el = document.getElementById('status'); el.innerHTML = msg; el.className = `status show status-${tipo}`; clearTimeout(el._t); el._t = setTimeout(() => el.classList.remove('show'), durationMs || (tipo==='err'?15000:5000)); }
@@ -158,20 +152,50 @@ function escapeHtml(str) { return String(str ?? '').replace(/[&<>]/g, function(m
 function detectarTipoFundo(tipoFii) { const t = String(tipoFii || '').toLowerCase(); return { isPapel: t.includes('cri')||t.includes('papel'), isTijolo: !t.includes('cri') && (t.includes('logístico')||t.includes('shopping')) }; }
 function getApiKey() { return localStorage.getItem('gemini_api_key') || ''; }
 function validarApiKey(key) { return key && key.startsWith('AIza') && key.length > 30; }
-function updateApiStatusUI() { const key = getApiKey(); const el = document.getElementById('apiStatus'); if(validarApiKey(key)) { el.textContent = '✅ Chave OK'; el.className = 'api-status valid'; document.getElementById('apiKeyInput').value = key; } else if(key) { el.textContent = '⚠️ Chave inválida'; el.className = 'api-status invalid'; document.getElementById('apiKeyInput').value = key; } else { el.textContent = 'Nenhuma chave salva.'; el.className = 'api-status'; } }
-document.getElementById('btnSalvarKey').addEventListener('click', () => { const val = document.getElementById('apiKeyInput').value.trim(); if(!val) { setStatus('Cole a chave', 'err'); return; } if(!validarApiKey(val)) { setStatus('Chave inválida (deve iniciar com AIza)', 'err'); return; } localStorage.setItem('gemini_api_key', val); updateApiStatusUI(); setStatus('✅ Chave salva', 'ok'); });
-document.getElementById('apiEye').addEventListener('click', () => { const inp = document.getElementById('apiKeyInput'); inp.type = inp.type === 'password' ? 'text' : 'password'; });
+
+function updateApiStatusUI() { 
+    const key = getApiKey(); 
+    const el = document.getElementById('apiStatus'); 
+    if(validarApiKey(key)) { el.textContent = '✅ Chave OK'; el.className = 'api-status valid'; document.getElementById('apiKeyInput').value = key; } 
+    else if(key) { el.textContent = '⚠️ Chave inválida'; el.className = 'api-status invalid'; document.getElementById('apiKeyInput').value = key; } 
+    else { el.textContent = 'Nenhuma chave salva.'; el.className = 'api-status'; } 
+}
+
+document.getElementById('btnSalvarKey').addEventListener('click', () => { 
+    const val = document.getElementById('apiKeyInput').value.trim(); 
+    if(!val) { setStatus('Cole a chave', 'err'); return; } 
+    if(!validarApiKey(val)) { setStatus('Chave inválida (deve iniciar com AIza)', 'err'); return; } 
+    localStorage.setItem('gemini_api_key', val); 
+    updateApiStatusUI(); 
+    setStatus('✅ Chave salva', 'ok'); 
+});
+
+document.getElementById('apiEye').addEventListener('click', () => { 
+    const inp = document.getElementById('apiKeyInput'); 
+    inp.type = inp.type === 'password' ? 'text' : 'password'; 
+});
+
 updateApiStatusUI();
 
-// ========== FUNÇÕES DE BUSCA VIA WORKER ==========
+// ========== FUNÇÃO DE BUSCA CORRIGIDA ==========
 async function buscarRelatorios(ticker) {
+  const agora = new Date();
+  
   const resp = await fetch(`${WORKER_BASE}/buscar?ticker=${encodeURIComponent(ticker)}`);
   if (!resp.ok) throw new Error(`Worker respondeu com status ${resp.status}`);
+  
   const data = await resp.json();
   if (data.erro) throw new Error(data.erro);
   if (!data.documentos || !Array.isArray(data.documentos)) throw new Error('Resposta inválida do Worker');
-  const docs = data.documentos.filter(d => d.tipo === "Relatório Gerencial");
+
+  const docs = data.documentos.filter(d => {
+    if (d.tipo !== "Relatório Gerencial") return false;
+    const entrega = new Date(d.dataEntrega);
+    return entrega <= agora;
+  });
+
   docs.sort((a,b) => (b.dataEntrega || "").localeCompare(a.dataEntrega || ""));
+
   return docs.slice(0, 3);
 }
 
@@ -208,7 +232,7 @@ document.getElementById('btnBuscarRelatorios').addEventListener('click', async (
       listaDiv.innerHTML = '<div style="padding:1rem;">Nenhum Relatório Gerencial encontrado para este ticker.</div>';
       return;
     }
-    let html = `<div class="result-label" style="margin-bottom:0.5rem;">📄 Últimos ${relatorios.length} relatórios gerenciais (mais recentes):</div>`;
+    let html = `<div class="result-label" style="margin-bottom:0.5rem;">📄 Últimos ${relatorios.length} relatórios gerenciais (até agora):</div>`;
     for (const doc of relatorios) {
       html += `
         <div style="padding:0.75rem; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center;">
@@ -235,7 +259,6 @@ document.getElementById('btnLimparBusca').addEventListener('click', () => {
   document.getElementById('listaRelatorios').innerHTML = '';
 });
 
-// ========== TODAS AS FUNÇÕES DE ANÁLISE (EXTRAÇÃO PDF, GEMINI, CACHE, RENDER) ==========
 const TEXTO_MAX = 400000;
 function normalizarTexto(texto) { return texto.replace(/[\n\r\t]+/g, ' ').replace(/\s+/g, ' ').trim(); }
 async function extrairTextoPDF(file) {
@@ -257,40 +280,7 @@ async function extrairTextoPDF(file) {
 
 async function analisarComGemini(textoPDF, apiKey) {
   dbg('🤖 Enviando para Gemini...');
-  const prompt = `Você é um analista especialista em FIIs. Extraia do relatório gerencial as informações no formato JSON abaixo. Retorne APENAS o JSON, sem texto extra.
-{
-  "ticker": "string",
-  "gestora": "string",
-  "tipo_fii": "string",
-  "periodo_referencia": "string",
-  "vacancia_fisica": "string",
-  "vacancia_financeira": "string",
-  "inadimplencia": "string",
-  "ltv": "string",
-  "divida_pl": "string",
-  "custo_divida": "string",
-  "prazo_medio_divida": "string",
-  "prazo_medio_cri": "string",
-  "distribuicao": "string",
-  "resultado_distribuivel": "string",
-  "receita_total": "string",
-  "despesas_totais": "string",
-  "saldo_caixa": "string",
-  "num_imoveis": "string",
-  "num_cris": "string",
-  "num_inquilinos": "string",
-  "abl_total": "string",
-  "saida_inquilino": "string",
-  "entrada_inquilino": "string",
-  "reajustes": "string",
-  "parcelas_pagar": "string",
-  "principais_riscos": "string",
-  "pontos_positivos": "string",
-  "resumo_analista": "string",
-  "comentario_gestor": "string"
-}
-Use null se não encontrar. Seja preciso.
-RELATÓRIO:\n${textoPDF}`;
+  const prompt = `Você é um analista especialista em FIIs. Extraia do relatório gerencial as informações no formato JSON abaixo. Retorne APENAS o JSON, sem texto extra.\n{\n  "ticker": "string",\n  "gestora": "string",\n  "tipo_fii": "string",\n  "periodo_referencia": "string",\n  "vacancia_fisica": "string",\n  "vacancia_financeira": "string",\n  "inadimplencia": "string",\n  "ltv": "string",\n  "divida_pl": "string",\n  "custo_divida": "string",\n  "prazo_medio_divida": "string",\n  "prazo_medio_cri": "string",\n  "distribuicao": "string",\n  "resultado_distribuivel": "string",\n  "receita_total": "string",\n  "despesas_totais": "string",\n  "saldo_caixa": "string",\n  "num_imoveis": "string",\n  "num_cris": "string",\n  "num_inquilinos": "string",\n  "abl_total": "string",\n  "saida_inquilino": "string",\n  "entrada_inquilino": "string",\n  "reajustes": "string",\n  "parcelas_pagar": "string",\n  "principais_riscos": "string",\n  "pontos_positivos": "string",\n  "resumo_analista": "string",\n  "comentario_gestor": "string"\n}\nUse null se não encontrar. Seja preciso.\nRELATÓRIO:\n${textoPDF}`;
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
   const payload = { contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, maxOutputTokens: 8192 } };
   for(let t=1; t<=3; t++) {
@@ -310,7 +300,6 @@ RELATÓRIO:\n${textoPDF}`;
 }
 
 function extrairNumero(val) { if(!val) return null; const n=parseFloat(String(val).replace(/[^\d,.-]/g,'').replace(',','.')); return isNaN(n)?null:n; }
-function formatarValorFinanceiro(val) { if(!val||val==='null') return val; const str=String(val).trim(); if(/[R$%a-zA-ZÀ-ÿ\/+]/.test(str)) return str; const semPontuacao=str.replace(/\./g,'').replace(',','.'); const num=parseFloat(semPontuacao); if(isNaN(num)) return str; if(Math.abs(num)<1000 && str.includes(',')) return str; if(Math.abs(num)>=1000) { const temDecimal=!Number.isInteger(num); return num.toLocaleString('pt-BR',{style:'currency',currency:'BRL',minimumFractionDigits:temDecimal?2:0,maximumFractionDigits:temDecimal?2:0}); } return str; }
 function colorVacancia(val) { const n=extrairNumero(val); if(n===null) return ''; return n<=5?'ok':n<=20?'neutro':'alerta'; }
 function colorLTV(val, tipo) { const n=extrairNumero(val); if(n===null) return ''; const {isPapel}=detectarTipoFundo(tipo); if(isPapel) return n<=60?'ok':n<=70?'neutro':'alerta'; return n<=10?'ok':n<=20?'neutro':'alerta'; }
 function colorInadimplencia(val) { const n=extrairNumero(val); if(n===null||n===0) return 'ok'; return n<=10?'ok':n<=20?'neutro':'alerta'; }
@@ -340,7 +329,6 @@ function renderResultados(d) {
   document.getElementById('resultArea').style.display = 'block';
 }
 
-// Cache
 const CACHE_PREFIX = 'leitor_fii_cache_';
 async function hashArquivoSHA256(file) { const ab = await file.arrayBuffer(); if(!crypto.subtle) return `fallback_${file.name}_${file.size}`; const hash = await crypto.subtle.digest('SHA-256', ab); return Array.from(new Uint8Array(hash)).map(b=>b.toString(16).padStart(2,'0')).join(''); }
 function getCachedAnalysis(hash) { try { const raw = localStorage.getItem(CACHE_PREFIX+hash); return raw?JSON.parse(raw):null; } catch(e){return null;} }
